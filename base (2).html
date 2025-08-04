@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Translance{% endblock %}</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" 
+        href="{{ url_for('static', filename='css/styles.css') }}">
+
+  <!-- Font Awesome for icons -->
+  <link rel="stylesheet" 
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+  <!-- Error handling JS -->
+  <script>
+  window.addEventListener('DOMContentLoaded', () => {
+    // Display flash messages as Toast notifications
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          showToast("{{ category }}", "{{ message }}");
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+  });
+
+  function showToast(type, message) {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+  }
+  </script>
+
+  <style>
+    /* User info header styles */
+    .user-header {
+      background-color: #f8f9fa;
+      padding: 10px 20px;
+      border-bottom: 1px solid #dee2e6;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .user-info i {
+      color: #007bff;
+    }
+
+    .logout-btn {
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      padding: 5px 15px;
+      border-radius: 4px;
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .logout-btn:hover {
+      background-color: #c82333;
+      color: white;
+      text-decoration: none;
+    }
+
+    /* Toast notification styles */
+    .toast {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 15px 20px;
+      border-radius: 4px;
+      color: white;
+      z-index: 1000;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .toast-success {
+      background-color: #28a745;
+    }
+
+    .toast-error {
+      background-color: #dc3545;
+    }
+
+    .toast-info {
+      background-color: #17a2b8;
+    }
+
+    .toast-warning {
+      background-color: #ffc107;
+      color: #333;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  {% if current_user %}
+  <!-- User header - only show when logged in -->
+  <div class="user-header">
+    <div class="user-info">
+      <span><i class="fas fa-user-circle"></i> Logged in as: <strong>{{ current_user }}</strong></span>
+      <span><i class="fas fa-clock"></i> Session expires in 60 minutes</span>
+    </div>
+    <a href="{{ url_for('main.logout') }}" class="logout-btn">
+      <i class="fas fa-sign-out-alt"></i> Logout
+    </a>
+  </div>
+  {% endif %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- JS Bundle -->
+  <script src="{{ url_for('static', filename='js/progress.js') }}"></script>
+</body>
+</html>

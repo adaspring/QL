@@ -33,4 +33,4 @@ jobs:
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
       with:
-        category: "/language:python" # Better results organization
+        category: "/language:${{ matrix.language }}" # Better results organization

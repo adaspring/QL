@@ -415,58 +415,103 @@ def translate_json_file(
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(translated_data, f, indent=2, ensure_ascii=False)
     print(f"✅ Translation completed: {output_file}")
-    
+
     if segment_file:
         segment_translations = {}
+        
         for block_id, block_data in translated_data.items():
             if "segments" in block_data:
                 segment_count = len(block_data["segments"])
+                
                 if segment_count == 1:
-                   # Single segment: use individual translation
-                   for seg_id, seg_text in block_data["segments"].items():
-                       if isinstance(seg_text, dict) and "text" in seg_text:
-                           segment_translations[seg_id] = seg_text["text"]
-                       else:
-                           segment_translations[seg_id] = seg_text
+                    # Single segment: use individual translation
+                    for seg_id, seg_text in block_data["segments"].items():
+                        if isinstance(seg_text, dict) and "text" in seg_text:
+                            segment_translations[seg_id] = seg_text["text"]
+                        else:
+                            segment_translations[seg_id] = seg_text
+                
                 elif segment_count > 1:
-                   # Multiple segments: split block translation back into segments
-                   if "text" in block_data:
-                       block_translation = block_data["text"]
-                       if isinstance(block_translation, dict):
-                           block_translation = block_translation["text"]
-                       original_segments = list(block_data["segments"].values())
-                       original_lengths = [len(seg.split()) if isinstance(seg, str) else len(seg["text"].split()) for seg in original_segments]
-                       # Split the translated block by words and redistribute
-                       translated_words = block_translation.split()
-                       split_parts = []
-                       word_index = 0
-                       for length in original_lengths:
-                           if word_index + length <= len(translated_words):
-                               segment_words = translated_words[word_index:word_index + length]
-                               split_parts.append(" ".join(segment_words))
-                               word_index += length
-                           else:
-                               # Fallback: take remaining words
-                               remaining_words = translated_words[word_index:]
-                               if remaining_words:
-                                   split_parts.append(" ".join(remaining_words))
-                               break
-                       # Assign split parts to segments
-                       segment_ids = list(block_data["segments"].keys())
-                       for i, seg_id in enumerate(segment_ids):
-                           if i < len(split_parts):
-                               segment_translations[seg_id] = split_parts[i]
-                           else:
-                               # Fallback to individual translation if split failed
-                               seg_text = block_data["segments"][seg_id]
-                               if isinstance(seg_text, dict) and "text" in seg_text:
-                                   segment_translations[seg_id] = seg_text["text"]
-                               else:
-                                   segment_translations[seg_id] = seg_text
-    
+                    # Multiple segments: split block translation back into segments
+                    if "text" in block_data:
+                        block_translation = block_data["text"]
+                        if isinstance(block_translation, dict):
+                            block_translation = block_translation["text"]
+                        
+                        # Hybrid approach: Word count ranges + boundary detection
+                        original_segments = list(block_data["segments"].values())
+                        original_word_counts = [
+                            len((seg["text"] if isinstance(seg, dict) else seg).split()) 
+                            for seg in original_segments
+                        ]
+                        
+                        # Allow 30% flexibility for translation changes
+                        word_ranges = [(int(count * 0.7), int(count * 1.3)) for count in original_word_counts]
+                        
+                        # Split by sentences/punctuation
+                        import re
+                        potential_splits = re.split(r'(?<=[.!?;])\s+', block_translation)
+                        potential_splits = [s.strip() for s in potential_splits if s.strip()]
+                        
+                        # Try to match splits to word count ranges
+                        split_parts = []
+                        remaining_text = block_translation
+                        words_used = 0
+                        total_words = len(block_translation.split())
+                        
+                        success = True
+                        for i, (min_words, max_words) in enumerate(word_ranges):
+                            if i == len(word_ranges) - 1:  # Last segment gets all remaining
+                                split_parts.append(remaining_text.strip())
+                                break
+                                
+                            # Find best split point within word range
+                            words_so_far = 0
+                            best_split_idx = -1
+                            
+                            for j, split in enumerate(potential_splits):
+                                words_so_far += len(split.split())
+                                current_word_count = words_so_far - words_used
+                                
+                                if min_words <= current_word_count <= max_words:
+                                    best_split_idx = j
+                                    break
+                            
+                            if best_split_idx == -1:
+                                success = False
+                                break
+                            
+                            # Take splits up to best split point
+                            segment_text = " ".join(potential_splits[:best_split_idx + 1])
+                            split_parts.append(segment_text.strip())
+                            
+                            # Update remaining text and splits
+                            words_used += len(segment_text.split())
+                            potential_splits = potential_splits[best_split_idx + 1:]
+                            remaining_text = " ".join(potential_splits)
+                        
+                        # Fallback: Use individual segment translations if hybrid fails
+                        if not success or len(split_parts) != segment_count:
+                            split_parts = None
+
+                        # Assign split parts to segments (or fallback to individual translations)
+                        segment_ids = list(block_data["segments"].keys())
+                        for i, seg_id in enumerate(segment_ids):
+                            if split_parts and i < len(split_parts):
+                                # Use hybrid split result
+                                segment_translations[seg_id] = split_parts[i]
+                            else:
+                                # Fallback to individual segment translation
+                                seg_text = block_data["segments"][seg_id]
+                                if isinstance(seg_text, dict) and "text" in seg_text:
+                                    segment_translations[seg_id] = seg_text["text"]
+                                else:
+                                    segment_translations[seg_id] = seg_text
+
         with open(segment_file, "w", encoding="utf-8") as f:
             json.dump(segment_translations, f, indent=2, ensure_ascii=False)
-        print(f"✅ Segment-only translations exported: {segment_file}")
+        print(f"✅ Segment-only translations exported with block decoupling: {segment_file}")
+
 
     # NEW: Track memory usage statistics
     track_memory_usage(

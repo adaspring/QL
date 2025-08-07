@@ -416,17 +416,54 @@ def translate_json_file(
         json.dump(translated_data, f, indent=2, ensure_ascii=False)
     print(f"✅ Translation completed: {output_file}")
     
-    # Export segments if requested (now safe since directory exists)
     if segment_file:
         segment_translations = {}
         for block_id, block_data in translated_data.items():
             if "segments" in block_data:
-                for seg_id, seg_text in block_data["segments"].items():
-                    if isinstance(seg_text, dict) and "text" in seg_text:
-                        segment_translations[seg_id] = seg_text["text"]
-                    else:
-                        segment_translations[seg_id] = seg_text                 
-
+                segment_count = len(block_data["segments"])
+                if segment_count == 1:
+                   # Single segment: use individual translation
+                   for seg_id, seg_text in block_data["segments"].items():
+                       if isinstance(seg_text, dict) and "text" in seg_text:
+                           segment_translations[seg_id] = seg_text["text"]
+                       else:
+                           segment_translations[seg_id] = seg_text
+                elif segment_count > 1:
+                   # Multiple segments: split block translation back into segments
+                   if "text" in block_data:
+                       block_translation = block_data["text"]
+                       if isinstance(block_translation, dict):
+                           block_translation = block_translation["text"]
+                       original_segments = list(block_data["segments"].values())
+                       original_lengths = [len(seg.split()) if isinstance(seg, str) else len(seg["text"].split()) for seg in original_segments]
+                       # Split the translated block by words and redistribute
+                       translated_words = block_translation.split()
+                       split_parts = []
+                       word_index = 0
+                       for length in original_lengths:
+                           if word_index + length <= len(translated_words):
+                               segment_words = translated_words[word_index:word_index + length]
+                               split_parts.append(" ".join(segment_words))
+                               word_index += length
+                           else:
+                               # Fallback: take remaining words
+                               remaining_words = translated_words[word_index:]
+                               if remaining_words:
+                                   split_parts.append(" ".join(remaining_words))
+                               break
+                       # Assign split parts to segments
+                       segment_ids = list(block_data["segments"].keys())
+                       for i, seg_id in enumerate(segment_ids):
+                           if i < len(split_parts):
+                               segment_translations[seg_id] = split_parts[i]
+                           else:
+                               # Fallback to individual translation if split failed
+                               seg_text = block_data["segments"][seg_id]
+                               if isinstance(seg_text, dict) and "text" in seg_text:
+                                   segment_translations[seg_id] = seg_text["text"]
+                               else:
+                                   segment_translations[seg_id] = seg_text
+    
         with open(segment_file, "w", encoding="utf-8") as f:
             json.dump(segment_translations, f, indent=2, ensure_ascii=False)
         print(f"✅ Segment-only translations exported: {segment_file}")
